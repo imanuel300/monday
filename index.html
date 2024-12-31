@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>גרף נתונים מ-Monday.com</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    #myChart {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>גרף נתונים מ-Monday.com</h1>
+  <canvas id="myChart" width="400" height="200"></canvas>
+
+  <script>
+    const apiKey = '';  // הכנס כאן את ה-API Key שלך
+    const boardId = 1437018123;     // מזהה הלוח שלך
+
+    // בקשה ל-API של Monday.com לשליפת נתונים
+    const query = `
+      query {
+        boards(ids: [${boardId}]) {
+          items_page {
+            items {
+              name
+              column_values {
+                column {
+                  title
+                  type
+                }
+                text
+                value
+              }
+            }
+          }
+        }
+      }`;
+
+    // שליחה ל-API של Monday.com
+    fetch('https://api.monday.com/v2', {
+      method: 'POST',
+      headers: {
+        'Authorization': apiKey,
+        'Content-Type': 'application/json',
+        'API-Version': '2024-01'  // הוספת גרסת API
+      },
+      body: JSON.stringify({ query })
+    })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return response.json();
+    })
+    .then(data => {
+      console.log('API Response:', data);
+      if (data.errors) {
+        throw new Error(data.errors.map(e => e.message).join(', '));
+      }
+      processData(data);
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      document.body.innerHTML += `<p style="color: red;">שגיאה: ${error.message}</p>`;
+    });
+
+    // עיבוד הנתונים שנשלפו
+    function processData(data) {
+      console.log('Raw API Response:', data);
+
+      if (!data || !data.data || !data.data.boards || !data.data.boards[0]) {
+        console.error('Invalid API response structure:', data);
+        document.body.innerHTML += '<p style="color: red;">שגיאה בטעינת הנתונים. אנא בדוק את הקונסול.</p>';
+        return;
+      }
+
+      const items = data.data.boards[0].items_page.items;
+      if (!items || !items.length) {
+        console.error('No items found in the board');
+        document.body.innerHTML += '<p style="color: red;">לא נמצאו פריטים בלוח.</p>';
+        return;
+      }
+
+      const statuses = {};
+      items.forEach(item => {
+        const statusColumn = item.column_values.find(col => 
+          col.column?.title === 'Status' || 
+          col.column?.title === 'סטטוס' || 
+          col.column?.title === 'status'
+        );
+        if (statusColumn && statusColumn.text) {
+          statuses[statusColumn.text] = (statuses[statusColumn.text] || 0) + 1;
+        }
+      });
+
+      if (Object.keys(statuses).length === 0) {
+        console.error('No status data found');
+        document.body.innerHTML += '<p style="color: red;">לא נמצאו נתוני סטטוס. אנא ודא שיש עמודת סטטוס בלוח.</p>';
+        return;
+      }
+
+      createChart(statuses);
+    }
+
+    // יצירת גרף באמצעות Chart.js
+    function createChart(statuses) {
+      const ctx = document.getElementById('myChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: Object.keys(statuses),
+          datasets: [{
+            label: 'מספר משימות לפי סטטוס', // שיניתי לעברית
+            data: Object.values(statuses),
+            backgroundColor: [
+              'rgba(255, 99, 132, 0.2)',
+              'rgba(54, 162, 235, 0.2)',
+              'rgba(255, 206, 86, 0.2)',
+              'rgba(75, 192, 192, 0.2)'
+            ],
+            borderColor: [
+              'rgba(255, 99, 132, 1)',
+              'rgba(54, 162, 235, 1)',
+              'rgba(255, 206, 86, 1)',
+              'rgba(75, 192, 192, 1)'
+            ],
+            borderWidth: 1
+          }]
+        },
+        options: {
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: 'מספר משימות'
+              }
+            }
+          },
+          plugins: {
+            title: {
+              display: true,
+              text: 'התפלגות משימות לפי סטטוס'
+            }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
